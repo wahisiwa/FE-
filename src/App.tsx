@@ -41,6 +41,12 @@ export default function App() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [shuffledIndices, setShuffledIndices] = useState<number[]>([]);
 
+  // 10-Question Quiz States
+  const [isQuizActive, setIsQuizActive] = useState(false);
+  const [quizStep, setQuizStep] = useState(0);
+  const [quizScore, setQuizScore] = useState(0);
+  const [showQuizResult, setShowQuizResult] = useState(false);
+
   // Load progress from LocalStorage
   useEffect(() => {
     const savedMastered = localStorage.getItem('fe_mastered_ids');
@@ -100,10 +106,51 @@ export default function App() {
   };
 
   const currentTerm = useMemo(() => {
-    if (filteredTerms.length === 0) return null;
-    const index = shuffledIndices[currentCardIndex] ?? 0;
-    return filteredTerms[index] || filteredTerms[0];
+    if (filteredTerms.length === 0 || shuffledIndices.length === 0) return null;
+    const index = shuffledIndices[currentCardIndex % shuffledIndices.length];
+    if (index === undefined) return filteredTerms[0] || null;
+    return filteredTerms[index] || filteredTerms[0] || null;
   }, [filteredTerms, shuffledIndices, currentCardIndex]);
+
+  const startQuiz = () => {
+    if (filteredTerms.length === 0) return;
+    const count = Math.min(10, filteredTerms.length);
+    const indices = Array.from({ length: filteredTerms.length }, (_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    setShuffledIndices(indices.slice(0, count));
+    setCurrentCardIndex(0);
+    setIsFlipped(false);
+    setIsQuizActive(true);
+    setQuizStep(0);
+    setQuizScore(0);
+    setShowQuizResult(false);
+  };
+
+  const handleQuizAnswer = (isCorrect: boolean) => {
+    if (isCorrect) setQuizScore(prev => prev + 1);
+    
+    if (quizStep + 1 < shuffledIndices.length) {
+      setIsFlipped(false);
+      setTimeout(() => {
+        setQuizStep(prev => prev + 1);
+        setCurrentCardIndex(prev => prev + 1);
+      }, 150);
+    } else {
+      setShowQuizResult(true);
+    }
+  };
+
+  const endQuiz = () => {
+    setIsQuizActive(false);
+    setShowQuizResult(false);
+    // Shuffle all again for normal mode
+    const indices = Array.from({ length: filteredTerms.length }, (_, i) => i);
+    setShuffledIndices(indices);
+    setCurrentCardIndex(0);
+  };
 
   const toggleMastered = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -126,9 +173,12 @@ export default function App() {
     setCurrentCardIndex(0);
     setIsFlipped(false);
     setIsSidebarOpen(false);
+    setIsQuizActive(false);
+    setShowQuizResult(false);
   };
 
   const nextCard = () => {
+    if (filteredTerms.length === 0) return;
     setIsFlipped(false);
     setTimeout(() => {
       setCurrentCardIndex((prev) => (prev + 1) % filteredTerms.length);
@@ -136,6 +186,7 @@ export default function App() {
   };
 
   const prevCard = () => {
+    if (filteredTerms.length === 0) return;
     setIsFlipped(false);
     setTimeout(() => {
       setCurrentCardIndex((prev) => (prev - 1 + filteredTerms.length) % filteredTerms.length);
@@ -307,7 +358,11 @@ export default function App() {
               ].map((mode) => (
                 <button 
                   key={mode.id}
-                  onClick={() => setViewMode(mode.id as ViewMode)}
+                  onClick={() => {
+                    setViewMode(mode.id as ViewMode);
+                    setIsQuizActive(false);
+                    setShowQuizResult(false);
+                  }}
                   className={`
                     flex-1 lg:flex-none px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95
                     ${viewMode === mode.id ? 'bg-white text-[#1A1A1A] shadow-md' : 'text-gray-400 hover:text-[#1A1A1A]'}
@@ -399,9 +454,9 @@ export default function App() {
               >
                 {filteredTerms.length > 0 && currentTerm ? (
                   <>
-                    <div className="w-full aspect-[4/5] md:aspect-[16/10] perspective-2000 mb-8">
+                    <div className={`w-full aspect-[4/5] md:aspect-[16/10] perspective-2000 mb-8 ${isFlipped ? 'flashcard-flipped' : ''}`}>
                       <div 
-                        className={`flashcard-inner cursor-pointer ${isFlipped ? 'flashcard-flipped' : ''}`}
+                        className="flashcard-inner cursor-pointer"
                         onClick={() => setIsFlipped(!isFlipped)}
                       >
                         <div className="flashcard-front">
@@ -484,25 +539,50 @@ export default function App() {
                   <p className="text-sm text-gray-400 font-bold">解説文から正しい用語を導き出しましょう。</p>
                 </div>
 
-                {filteredTerms.length > 0 && currentTerm ? (
+                {showQuizResult ? (
+                  <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="w-full bg-white border border-[var(--color-line)] rounded-[2.5rem] p-12 shadow-2xl text-center"
+                  >
+                    <div className="w-24 h-24 bg-yellow-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                      <Trophy size={48} className="text-white" />
+                    </div>
+                    <h3 className="text-3xl font-bold mb-2">Quiz Completed!</h3>
+                    <div className="text-6xl font-black mb-8 text-[#1A1A1A]">
+                      {quizScore} <span className="text-2xl text-gray-300">/ {shuffledIndices.length}</span>
+                    </div>
+                    <div className="space-y-3">
+                      <button 
+                        onClick={startQuiz}
+                        className="w-full py-4 bg-[#1A1A1A] text-white rounded-2xl font-bold shadow-xl hover:bg-black transition-all active:scale-95"
+                      >
+                        もう一度挑戦する
+                      </button>
+                      <button 
+                        onClick={endQuiz}
+                        className="w-full py-4 bg-gray-100 text-[#1A1A1A] rounded-2xl font-bold hover:bg-gray-200 transition-all active:scale-95"
+                      >
+                        クイズを終了する
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : isQuizActive ? (
                   <div className="w-full bg-white border border-[var(--color-line)] rounded-[2.5rem] p-6 md:p-12 shadow-2xl relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-1.5 bg-gray-50">
                       <motion.div 
                         className="h-full bg-[#1A1A1A]" 
                         initial={{ width: 0 }}
-                        animate={{ width: `${((currentCardIndex + 1) / filteredTerms.length) * 100}%` }}
+                        animate={{ width: `${((quizStep + 1) / shuffledIndices.length) * 100}%` }}
                       ></motion.div>
                     </div>
 
                     <div className="mb-10">
                       <div className="flex justify-between items-center mb-4">
-                        <span className="col-header">Question</span>
-                        <button onClick={shuffleTerms} className="text-[10px] font-bold text-blue-500 flex items-center gap-1">
-                          <RotateCcw size={12} /> Shuffle
-                        </button>
+                        <span className="col-header">Question {quizStep + 1} / {shuffledIndices.length}</span>
                       </div>
                       <p className="text-xl md:text-2xl font-bold leading-relaxed text-gray-700">
-                        {currentTerm.meaning}
+                        {currentTerm?.meaning}
                       </p>
                     </div>
 
@@ -511,15 +591,17 @@ export default function App() {
                       <AnimatePresence mode="wait">
                         {isFlipped ? (
                           <motion.div
+                            key="answer"
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             className="flex flex-col items-center text-center"
                           >
-                            <h4 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight">{currentTerm.term}</h4>
-                            <p className="text-xs text-gray-400 font-bold italic leading-tight">{currentTerm.points}</p>
+                            <h4 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight">{currentTerm?.term}</h4>
+                            <p className="text-xs text-gray-400 font-bold italic leading-tight">{currentTerm?.points}</p>
                           </motion.div>
                         ) : (
                           <button 
+                            key="reveal"
                             onClick={() => setIsFlipped(true)}
                             className="w-full h-full flex flex-col items-center justify-center gap-3 py-6 text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300 hover:text-[#1A1A1A] transition-colors"
                           >
@@ -534,36 +616,48 @@ export default function App() {
                       {isFlipped ? (
                         <>
                           <button 
-                            onClick={() => {
-                              toggleMastered(currentTerm.id);
-                              nextCard();
-                            }}
+                            onClick={() => handleQuizAnswer(true)}
                             className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-green-500 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-all text-sm"
                           >
-                            <CheckCircle size={18} /> 正解・習得
+                            <CheckCircle size={18} /> 正解
                           </button>
                           <button 
-                            onClick={() => {
-                              toggleReview(currentTerm.id);
-                              nextCard();
-                            }}
-                            className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-yellow-400 text-[#1A1A1A] rounded-2xl font-bold shadow-lg active:scale-95 transition-all text-sm"
+                            onClick={() => handleQuizAnswer(false)}
+                            className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-red-500 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-all text-sm"
                           >
-                            <Star size={18} /> 不正解・復習
+                            <X size={18} /> 不正解
                           </button>
                         </>
                       ) : (
                         <button 
-                          onClick={nextCard}
+                          onClick={() => handleQuizAnswer(false)}
                           className="w-full md:w-auto px-10 py-4 border border-[var(--color-line)] rounded-2xl font-bold text-xs text-gray-400 hover:text-[#1A1A1A] hover:bg-gray-50 transition-all active:scale-95"
                         >
-                          スキップ ({currentCardIndex + 1}/{filteredTerms.length})
+                          わからない・スキップ
                         </button>
                       )}
                     </div>
                   </div>
                 ) : (
-                  <div className="py-24 text-center text-gray-400 font-bold italic">対象の用語がありません</div>
+                  <div className="max-w-md w-full bg-white border border-[var(--color-line)] rounded-[2.5rem] p-10 shadow-2xl text-center">
+                    <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                      <BrainCircuit size={40} />
+                    </div>
+                    <h3 className="text-2xl font-bold mb-4">10問ランダムクイズ</h3>
+                    <p className="text-gray-500 text-sm mb-8 leading-relaxed">
+                      現在の表示条件（カテゴリや検索）の中から、ランダムに10問出題されます。
+                    </p>
+                    <button 
+                      onClick={startQuiz}
+                      disabled={filteredTerms.length === 0}
+                      className="w-full py-4 bg-[#1A1A1A] text-white rounded-2xl font-bold shadow-xl hover:bg-black transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      クイズを開始する
+                    </button>
+                    {filteredTerms.length === 0 && (
+                      <p className="text-red-500 text-xs mt-3 font-bold">出題対象の用語がありません</p>
+                    )}
+                  </div>
                 )}
               </motion.div>
             )}
