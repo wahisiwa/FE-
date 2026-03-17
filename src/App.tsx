@@ -132,13 +132,15 @@ export default function App() {
   const handleQuizAnswer = (isCorrect: boolean) => {
     if (isCorrect) setQuizScore(prev => prev + 1);
     
-    if (quizStep + 1 < shuffledIndices.length) {
+    // 次の問題へ、またはリザルト画面へ
+    const nextStep = quizStep + 1;
+    if (nextStep < shuffledIndices.length) {
+      // 状態を一度に更新してレンダリングの不整合を防ぐ
       setIsFlipped(false);
-      setTimeout(() => {
-        setQuizStep(prev => prev + 1);
-        setCurrentCardIndex(prev => prev + 1);
-      }, 150);
+      setQuizStep(nextStep);
+      setCurrentCardIndex(prev => prev + 1);
     } else {
+      setIsFlipped(false);
       setShowQuizResult(true);
     }
   };
