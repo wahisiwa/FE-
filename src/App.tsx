@@ -106,10 +106,19 @@ export default function App() {
   };
 
   const currentTerm = useMemo(() => {
-    if (filteredTerms.length === 0 || shuffledIndices.length === 0) return null;
-    const index = shuffledIndices[currentCardIndex % shuffledIndices.length];
-    if (index === undefined) return filteredTerms[0] || null;
-    return filteredTerms[index] || filteredTerms[0] || null;
+    if (!filteredTerms || filteredTerms.length === 0 || !shuffledIndices || shuffledIndices.length === 0) {
+      return null;
+    }
+    
+    // インデックスが範囲内であることを保証する
+    const safeIndex = currentCardIndex % shuffledIndices.length;
+    const termIndex = shuffledIndices[safeIndex];
+    
+    if (termIndex === undefined) {
+      return filteredTerms[0] || null;
+    }
+    
+    return filteredTerms[termIndex] || filteredTerms[0] || null;
   }, [filteredTerms, shuffledIndices, currentCardIndex]);
 
   const startQuiz = () => {
@@ -130,18 +139,21 @@ export default function App() {
   };
 
   const handleQuizAnswer = (isCorrect: boolean) => {
+    // スコアの更新
     if (isCorrect) setQuizScore(prev => prev + 1);
     
-    // 次の問題へ、またはリザルト画面へ
+    // 次のステップを計算
     const nextStep = quizStep + 1;
+    
+    // 状態更新をバッチ処理的に行う
+    // 最後に flipped を戻すことで、一瞬前の問題が見えるのを防ぐ
     if (nextStep < shuffledIndices.length) {
-      // 状態を一度に更新してレンダリングの不整合を防ぐ
-      setIsFlipped(false);
       setQuizStep(nextStep);
       setCurrentCardIndex(prev => prev + 1);
-    } else {
       setIsFlipped(false);
+    } else {
       setShowQuizResult(true);
+      setIsFlipped(false);
     }
   };
 
